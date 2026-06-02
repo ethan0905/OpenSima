@@ -2,6 +2,14 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if [[ -f "$ROOT_DIR/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$ROOT_DIR/.env"
+  set +a
+fi
+
 SERVER_DIR="${MINECRAFT_SERVER_DIR:-"$ROOT_DIR/minecraft-server"}"
 MANIFEST_URL="https://launchermeta.mojang.com/mc/game/version_manifest.json"
 MEMORY_MIN="${MINECRAFT_SERVER_XMS:-1G}"
@@ -11,6 +19,7 @@ ONLINE_MODE="${MINECRAFT_ONLINE_MODE:-false}"
 REQUESTED_VERSION="${MINECRAFT_VERSION:-latest}"
 GAMEMODE="${MINECRAFT_GAMEMODE:-survival}"
 DIFFICULTY="${MINECRAFT_DIFFICULTY:-easy}"
+OPS="${MINECRAFT_OPS:-}"
 
 mkdir -p "$SERVER_DIR"
 
@@ -76,6 +85,60 @@ difficulty=$DIFFICULTY
 gamemode=$GAMEMODE
 spawn-protection=0
 EOF
+
+if [[ -n "$OPS" ]]; then
+  echo "[minecraft-server] Writing ops.json for: $OPS"
+  python3 - "$SERVER_DIR/ops.json" "$OPS" "$ONLINE_MODE" <<'PY'
+import hashlib
+import json
+import sys
+import uuid
+
+ops_path = sys.argv[1]
+ops = [name.strip() for name in sys.argv[2].split(",") if name.strip()]
+online_mode = sys.argv[3].lower() == "true"
+
+existing = []
+try:
+    with open(ops_path, "r", encoding="utf-8") as handle:
+        existing = json.load(handle)
+except (FileNotFoundError, json.JSONDecodeError):
+    existing = []
+
+by_name = {entry.get("name", "").lower(): entry for entry in existing if isinstance(entry, dict)}
+
+def offline_uuid(name: str) -> str:
+    digest = bytearray(hashlib.md5(f"OfflinePlayer:{name}".encode("utf-8")).digest())
+    digest[6] = (digest[6] & 0x0F) | 0x30
+    digest[8] = (digest[8] & 0x3F) | 0x80
+    return str(uuid.UUID(bytes=bytes(digest)))
+
+for name in ops:
+    key = name.lower()
+    if key in by_name:
+        by_name[key]["level"] = 4
+        by_name[key]["bypassesPlayerLimit"] = False
+        continue
+
+    if online_mode:
+        print(
+            f"[minecraft-server] Warning: cannot precompute the online-mode UUID for {name}; "
+            f"run `op {name}` in the server console if this entry does not work.",
+            file=sys.stderr,
+        )
+
+    by_name[key] = {
+        "uuid": offline_uuid(name),
+        "name": name,
+        "level": 4,
+        "bypassesPlayerLimit": False,
+    }
+
+with open(ops_path, "w", encoding="utf-8") as handle:
+    json.dump(list(by_name.values()), handle, indent=2)
+    handle.write("\n")
+PY
+fi
 
 if [[ "${ACCEPT_MINECRAFT_EULA:-false}" == "true" ]]; then
   echo "eula=true" > "$SERVER_DIR/eula.txt"

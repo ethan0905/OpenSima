@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Minecraft Agent Dashboard</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #101312;
+      --panel: #191d1b;
+      --panel-2: #202622;
+      --line: #303831;
+      --text: #e7ece8;
+      --muted: #9aa69d;
+      --good: #78d48b;
+      --warn: #e8c46b;
+      --bad: #ef7d73;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      min-height: 100vh;
+    }
+
+    .viewer {
+      min-height: 100vh;
+      background: #070807;
+      position: relative;
+    }
+
+    iframe {
+      width: 100%;
+      height: 100vh;
+      border: 0;
+      display: block;
+      background: #070807;
+    }
+
+    .viewer-empty {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    aside {
+      min-height: 100vh;
+      border-left: 1px solid var(--line);
+      background: var(--panel);
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 18px 18px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: 18px;
+      line-height: 1.2;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .status-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .metric {
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px;
+      min-width: 0;
+    }
+
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.2;
+      margin-bottom: 4px;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 14px;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    main {
+      overflow: auto;
+      padding: 14px 18px 18px;
+    }
+
+    section {
+      margin-bottom: 22px;
+    }
+
+    h2 {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+
+    .facts {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel-2);
+      min-height: 40px;
+    }
+
+    .name {
+      font-size: 14px;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .detail {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 2px;
+      overflow-wrap: anywhere;
+    }
+
+    .count {
+      font-variant-numeric: tabular-nums;
+      color: var(--text);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .empty {
+      color: var(--muted);
+      font-size: 13px;
+      padding: 10px 0;
+    }
+
+    .online {
+      color: var(--good);
+    }
+
+    .busy {
+      color: var(--warn);
+    }
+
+    .offline {
+      color: var(--bad);
+    }
+
+    @media (max-width: 900px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+
+      .viewer,
+      iframe {
+        height: 55vh;
+        min-height: 420px;
+      }
+
+      aside {
+        min-height: auto;
+        border-left: 0;
+        border-top: 1px solid var(--line);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="viewer">
+      <iframe id="agent-view" title="Agent view"></iframe>
+      <div id="viewer-empty" class="viewer-empty">Waiting for viewer...</div>
+    </div>
+    <aside>
+      <header>
+        <h1 id="agent-name">AI_Agent</h1>
+        <div class="status-row">
+          <div class="metric"><span>Status</span><strong id="status">offline</strong></div>
+          <div class="metric"><span>Health</span><strong id="health">-</strong></div>
+          <div class="metric"><span>Food</span><strong id="food">-</strong></div>
+        </div>
+      </header>
+      <main>
+        <section>
+          <h2>Position</h2>
+          <div class="facts">
+            <div class="metric"><span>X</span><strong id="pos-x">-</strong></div>
+            <div class="metric"><span>Y</span><strong id="pos-y">-</strong></div>
+            <div class="metric"><span>Z</span><strong id="pos-z">-</strong></div>
+            <div class="metric"><span>Held</span><strong id="held">-</strong></div>
+          </div>
+        </section>
+
+        <section>
+          <h2>Inventory</h2>
+          <div id="inventory" class="list"></div>
+        </section>
+
+        <section>
+          <h2>Nearby Entities</h2>
+          <div id="entities" class="list"></div>
+        </section>
+
+        <section>
+          <h2>Nearby Blocks</h2>
+          <div id="blocks" class="list"></div>
+        </section>
+      </main>
+    </aside>
+  </div>
+
+  <script>
+    const els = {
+      viewer: document.getElementById('agent-view'),
+      viewerEmpty: document.getElementById('viewer-empty'),
+      agentName: document.getElementById('agent-name'),
+      status: document.getElementById('status'),
+      health: document.getElementById('health'),
+      food: document.getElementById('food'),
+      posX: document.getElementById('pos-x'),
+      posY: document.getElementById('pos-y'),
+      posZ: document.getElementById('pos-z'),
+      held: document.getElementById('held'),
+      inventory: document.getElementById('inventory'),
+      entities: document.getElementById('entities'),
+      blocks: document.getElementById('blocks')
+    }
+
+    function formatNumber (value) {
+      return Number.isFinite(value) ? value.toFixed(2) : '-'
+    }
+
+    function itemLabel (item) {
+      return item.display_name || item.displayName || item.name || 'unknown'
+    }
+
+    function setStatus (agent) {
+      els.status.className = ''
+      if (!agent?.is_spawned) {
+        els.status.textContent = 'offline'
+        els.status.classList.add('offline')
+      } else if (agent.is_executing) {
+        els.status.textContent = 'executing'
+        els.status.classList.add('busy')
+      } else {
+        els.status.textContent = 'online'
+        els.status.classList.add('online')
+      }
+    }
+
+    function renderRows (target, rows, emptyText, renderRow) {
+      target.replaceChildren()
+      if (!rows || rows.length === 0) {
+        const empty = document.createElement('div')
+        empty.className = 'empty'
+        empty.textContent = emptyText
+        target.appendChild(empty)
+        return
+      }
+
+      for (const row of rows) {
+        target.appendChild(renderRow(row))
+      }
+    }
+
+    function makeRow (name, detail, count) {
+      const row = document.createElement('div')
+      row.className = 'row'
+
+      const left = document.createElement('div')
+      const title = document.createElement('div')
+      title.className = 'name'
+      title.textContent = name
+      left.appendChild(title)
+
+      if (detail) {
+        const sub = document.createElement('div')
+        sub.className = 'detail'
+        sub.textContent = detail
+        left.appendChild(sub)
+      }
+
+      const right = document.createElement('div')
+      right.className = 'count'
+      right.textContent = count
+
+      row.append(left, right)
+      return row
+    }
+
+    async function loadConfig () {
+      const response = await fetch('/dashboard-config')
+      const config = await response.json()
+      if (config.viewer_enabled && config.viewer_url) {
+        els.viewer.src = config.viewer_url
+        els.viewerEmpty.style.display = 'none'
+      } else {
+        els.viewerEmpty.textContent = 'Viewer disabled'
+      }
+    }
+
+    async function refreshState () {
+      try {
+        const response = await fetch('/state')
+        const state = await response.json()
+        const agent = state.agent || {}
+        const pos = agent.position || {}
+
+        els.agentName.textContent = agent.username || 'AI_Agent'
+        setStatus(agent)
+        els.health.textContent = agent.health == null ? '-' : Math.round(agent.health * 10) / 10
+        els.food.textContent = agent.food == null ? '-' : agent.food
+        els.posX.textContent = formatNumber(pos.x)
+        els.posY.textContent = formatNumber(pos.y)
+        els.posZ.textContent = formatNumber(pos.z)
+        els.held.textContent = agent.held_item ? itemLabel(agent.held_item) : '-'
+
+        renderRows(els.inventory, state.inventory_items, 'Inventory empty', item => (
+          makeRow(itemLabel(item), `slot ${item.slot}`, `x${item.count}`)
+        ))
+
+        renderRows(els.entities, state.nearby_entities, 'No nearby entities', entity => (
+          makeRow(entity.name, `${entity.type} · ${formatNumber(entity.distance)} blocks`, '')
+        ))
+
+        renderRows(els.blocks, state.nearby_blocks, 'No nearby tracked blocks', block => (
+          makeRow(block.name, `${formatNumber(block.distance)} blocks`, '')
+        ))
+      } catch (error) {
+        els.status.textContent = 'api error'
+        els.status.className = 'offline'
+      }
+    }
+
+    loadConfig().catch(() => {
+      els.viewerEmpty.textContent = 'Viewer unavailable'
+    })
+    refreshState()
+    setInterval(refreshState, 500)
+  </script>
+</body>
+</html>
