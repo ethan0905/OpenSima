@@ -3,6 +3,8 @@ require('dotenv').config()
 const express = require('express')
 const mineflayer = require('mineflayer')
 const mcDataLoader = require('minecraft-data')
+const path = require('path')
+const { mineflayer: mineflayerViewer } = require('prismarine-viewer')
 const { pathfinder, Movements } = require('mineflayer-pathfinder')
 const collectBlock = require('mineflayer-collectblock').plugin
 
@@ -24,6 +26,9 @@ const MINECRAFT_PORT = Number(process.env.MINECRAFT_PORT || 25565)
 const MINECRAFT_AGENT_USERNAME = process.env.MINECRAFT_AGENT_USERNAME || 'AI_Agent'
 const STEP_TIMEOUT_MS = 45000
 const CHAT_STATUS = process.env.AGENT_CHAT_STATUS !== 'false'
+const VIEWER_PORT = Number(process.env.AGENT_VIEWER_PORT || 3002)
+const VIEWER_DISTANCE = Number(process.env.AGENT_VIEWER_DISTANCE || 6)
+const VIEWER_ENABLED = process.env.AGENT_VIEWER_ENABLED !== 'false'
 
 const ACTIONS = {
   move_to: moveTo,
@@ -53,6 +58,7 @@ bot.once('spawn', () => {
   isSpawned = true
   const mcData = mcDataLoader(bot.version)
   bot.pathfinder.setMovements(new Movements(bot, mcData))
+  startViewer()
   console.log(`[agent] Spawned as ${bot.username} on ${MINECRAFT_HOST}:${MINECRAFT_PORT}`)
   sayStatus('online and ready')
 })
@@ -69,9 +75,20 @@ bot.on('health', () => console.log(`[agent] Health=${bot.health} Food=${bot.food
 const app = express()
 app.use(express.json({ limit: '128kb' }))
 
+app.get('/dashboard', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dashboard.html'))
+})
+
+app.get('/dashboard-config', (req, res) => {
+  res.json({
+    viewer_enabled: VIEWER_ENABLED,
+    viewer_url: `http://localhost:${VIEWER_PORT}`
+  })
+})
+
 app.get('/state', (req, res) => {
   try {
-    res.json(getState(bot, isSpawned))
+    res.json(getState(bot, isSpawned, isExecuting))
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message })
   }
@@ -154,6 +171,20 @@ function sayStatus (message) {
   }
 }
 
+function startViewer () {
+  if (!VIEWER_ENABLED) return
+  try {
+    mineflayerViewer(bot, {
+      port: VIEWER_PORT,
+      firstPerson: true,
+      viewDistance: VIEWER_DISTANCE
+    })
+    console.log(`[viewer] Agent view available at http://localhost:${VIEWER_PORT}`)
+  } catch (error) {
+    console.warn('[viewer] Could not start Prismarine Viewer:', error.message)
+  }
+}
+
 function validateActionPlan (body) {
   if (!body || typeof body !== 'object') return 'Body must be a JSON object'
   if (typeof body.goal !== 'string' || !body.goal.trim()) return 'goal is required'
@@ -178,4 +209,5 @@ function validateActionPlan (body) {
 
 app.listen(AGENT_API_PORT, () => {
   console.log(`[api] Mineflayer agent API listening on http://localhost:${AGENT_API_PORT}`)
+  console.log(`[dashboard] Open http://localhost:${AGENT_API_PORT}/dashboard`)
 })

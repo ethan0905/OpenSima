@@ -30,6 +30,25 @@ function inventorySummary (bot) {
   return [...counts.entries()].map(([name, count]) => ({ name, count }))
 }
 
+function inventoryItems (bot) {
+  return bot.inventory.items().map(item => ({
+    name: item.name,
+    display_name: item.displayName,
+    count: item.count,
+    slot: item.slot
+  }))
+}
+
+function heldItem (bot) {
+  if (!bot.heldItem) return null
+  return {
+    name: bot.heldItem.name,
+    display_name: bot.heldItem.displayName,
+    count: bot.heldItem.count,
+    slot: bot.heldItem.slot
+  }
+}
+
 function nearbyEntities (bot, radius = 24) {
   if (!bot.entity) return []
 
@@ -87,7 +106,7 @@ function nearbyBlocks (bot, radius = 8) {
     .slice(0, 40)
 }
 
-function getState (bot, isSpawned) {
+function getState (bot, isSpawned, isExecuting = false) {
   const position = bot.entity ? compactPosition(bot.entity.position) : { x: 0, y: 0, z: 0 }
   return {
     agent: {
@@ -95,9 +114,13 @@ function getState (bot, isSpawned) {
       position,
       health: bot.health ?? null,
       food: bot.food ?? null,
-      is_spawned: isSpawned
+      is_spawned: isSpawned,
+      is_executing: isExecuting,
+      quick_bar_slot: bot.quickBarSlot ?? null,
+      held_item: heldItem(bot)
     },
     inventory: inventorySummary(bot),
+    inventory_items: inventoryItems(bot),
     players: players(bot),
     nearby_entities: nearbyEntities(bot),
     nearby_blocks: nearbyBlocks(bot),

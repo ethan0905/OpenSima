@@ -16,6 +16,7 @@ AllowedAction = Literal[
 ]
 
 RiskLevel = Literal["low", "medium", "high"]
+ReasoningDecision = Literal["continue", "done", "blocked"]
 
 
 class ActionStep(BaseModel):
@@ -56,3 +57,12 @@ class ActionPlan(BaseModel):
         if self.risk_level == "high" and not self.requires_confirmation:
             raise ValueError("high risk plans require confirmation")
         return self
+
+
+class ProgressDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    decision: ReasoningDecision
+    reason: str = Field(min_length=1, max_length=500)
+    next_focus: str = Field(min_length=1, max_length=300)
+    confidence: float = Field(ge=0, le=1)
