@@ -111,6 +111,72 @@ python -m src.main --mode train --env minecraft --generations 3
 │Reward Model │◄────│ Experience  │────►│   Storage   │
 └─────────────┘     └─────────────┘     └─────────────┘
 ```
+
+## Installation
+
+### Basic Installation
+```bash
+pip install -e .
+```
+
+### For Development
+```bash
+pip install -e ".[dev]"
+```
+
+### For Minecraft Support (Optional)
+For MineRL environment support:
+```bash
+pip install minerl
+```
+
+Note: MineRL has additional dependencies including Java JDK 8. See the [MineRL installation guide](https://minerl.readthedocs.io/en/latest/tutorials/index.html) for detailed setup instructions.
+
+For raw Minecraft control (experimental):
+```bash
+pip install pyautogui pynput mss pillow
+```
+
+## Quick Start
+
+### Train the agent (dummy environment)
+```bash
+python -m src.main --mode train --generations 10 --episodes-per-gen 5
+```
+
+### Train the agent in Minecraft (MineRL)
+```bash
+python -m src.main --mode train --env minecraft --generations 5 --episodes-per-gen 3
+```
+
+### Run a single episode (dummy environment)
+```bash
+python -m src.main --mode play-once --task-id "reach_goal"
+```
+
+### Run a single Minecraft episode
+```bash
+python -m src.main --mode play-once --env minecraft --task-id "collect_wood"
+```
+
+### Inspect stored experience
+```bash
+python -m src.main --mode inspect-buffer
+```
+
+### View saved metrics
+```bash
+python -m src.main --mode view-metrics
+```
+
+## Project Structure
+
+```
+sima_like_agent/
+├── pyproject.toml
+├── README.md
+├── src/
+│   ├── main.py                    # Entry point and CLI
 │   ├── config/
 │   │   └── config.py             # Configuration classes
 │   ├── env/
@@ -170,17 +236,18 @@ The `RewardModel` scores episodes, with clear interfaces for plugging in learned
 
 ## Minecraft Configuration
 
-The Minecraft environment can be configured via CLI arguments or config files:
+The Minecraft environment is configured through `MinecraftConfig`:
 
 ```python
-# Example configuration
+from src.config.config import MinecraftConfig
+
 minecraft_config = MinecraftConfig(
-    backend="minerl",  # "minerl" or "raw" 
-    environment_name="MineRLNavigateDense-v0",  # MineRL environment
-    max_steps=1000,
-    frame_skip=1,
-    render=True,
-    action_space="discrete"  # "discrete" or "continuous"
+    use_minerl=True,
+    env_id="MineRLTreechop-v0",
+    frame_width=160,
+    frame_height=120,
+    frame_skip=4,
+    max_episode_steps=1000,
 )
 ```
 
@@ -193,7 +260,7 @@ Supported MineRL environments include:
 ### Raw Control Mode
 For direct Minecraft control:
 1. Start Minecraft client
-2. Use `--env minecraft --minecraft-backend raw` 
+2. Set `use_minerl=False` in config
 3. Ensure Minecraft window is focused and accessible
 
 **Note**: Raw control mode is experimental and requires additional setup.
@@ -202,13 +269,14 @@ For direct Minecraft control:
 
 ### Running Tests
 ```bash
-pytest tests/
+pip install -e ".[dev]"
+python -m pytest tests/
 ```
 
 ### Code Quality
 ```bash
 black src/ tests/
-ruff src/ tests/
+ruff check src/ tests/
 mypy src/
 ```
 
@@ -237,4 +305,3 @@ mypy src/
 ## License
 
 MIT License - see LICENSE file for details.
-

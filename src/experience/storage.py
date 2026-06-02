@@ -199,7 +199,14 @@ class EpisodeStorage:
         episodes = self.load_all_episodes()
         
         if not episodes:
-            return {"total_episodes": 0}
+            return {
+                "total_episodes": 0,
+                "unique_tasks": 0,
+                "task_distribution": {},
+                "overall_success_rate": 0.0,
+                "average_reward": 0.0,
+                "storage_size_bytes": self._get_storage_size(),
+            }
             
         task_counts = {}
         success_count = 0

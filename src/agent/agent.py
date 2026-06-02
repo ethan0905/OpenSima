@@ -33,7 +33,8 @@ class Agent:
                  env: GameEnv, 
                  policy: Policy, 
                  reward_model: RewardModel, 
-                 encoder: ObservationEncoder):
+                 encoder: ObservationEncoder,
+                 success_threshold: float = 5.0):
         """
         Initialize the agent with its core components.
         
@@ -47,6 +48,7 @@ class Agent:
         self.policy = policy
         self.reward_model = reward_model
         self.encoder = encoder
+        self.success_threshold = success_threshold
         
         # Internal state
         self._current_episode_data: List[Dict] = []
@@ -124,7 +126,7 @@ class Agent:
             final_reward=0.0,  # Will be set by reward model
             success=False,     # Will be set based on reward model
             metadata={
-                "task_template": task.metadata.get("template", "unknown"),
+                "template": task.metadata.get("template", "unknown"),
                 "steps_taken": step_count,
                 "env_reward_total": sum(episode_rewards),
                 "task_max_steps": task.max_steps,
@@ -137,8 +139,9 @@ class Agent:
         episode.final_reward = final_reward
         
         # Determine success (threshold can be adjusted)
-        success_threshold = 5.0  # TODO: Make this configurable
-        episode.success = final_reward >= success_threshold and episode.reached_goal
+        episode.success = (
+            final_reward >= self.success_threshold and episode.reached_goal
+        )
         
         return episode
 

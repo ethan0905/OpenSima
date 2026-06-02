@@ -163,7 +163,7 @@ class SimpleRewardModel(RewardModel):
         total_reward += progress_reward
         
         # Bonus for not timing out
-        if episode.success and not episode.was_truncated:
+        if episode.reached_goal and not episode.was_truncated:
             total_reward += 1.0
             
         # Small bonus for environment rewards (if any)

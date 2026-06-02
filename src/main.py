@@ -130,7 +130,8 @@ def create_components(config: SIMAConfig):
         env=env,
         policy=policy,
         reward_model=reward_model,
-        encoder=encoder
+        encoder=encoder,
+        success_threshold=config.training.success_threshold,
     )
     
     logger.info("All components created successfully")
