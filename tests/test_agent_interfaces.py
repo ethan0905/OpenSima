@@ -5,24 +5,20 @@ This module tests the integration between different components of the
 SIMA system, ensuring they work together correctly.
 """
 
-import sys
 import tempfile
 from pathlib import Path
 
-# Add src to path for tests
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
 import numpy as np
 
-from env.dummy_env import DummyGameEnv
-from env.vision import DummyVisionEncoder
-from agent.policy import RandomPolicy, EpsilonGreedyPolicy
-from agent.agent import Agent
-from tasks.task_schema import Task
-from tasks.task_setter import TaskSetter
-from reward.reward_model import SimpleRewardModel
-from experience.buffer import ReplayBuffer
-from experience.storage import EpisodeStorage
+from src.agent.agent import Agent
+from src.agent.policy import EpsilonGreedyPolicy, RandomPolicy
+from src.env.dummy_env import DummyGameEnv
+from src.env.vision import DummyVisionEncoder
+from src.experience.buffer import ReplayBuffer
+from src.experience.storage import EpisodeStorage
+from src.reward.reward_model import SimpleRewardModel
+from src.tasks.task_schema import Task
+from src.tasks.task_setter import TaskSetter
 
 
 class TestAgentInterfaces:
@@ -148,7 +144,7 @@ class TestAgentInterfaces:
         assert task.description == "Navigate to the goal location"
         assert task.estimated_reward == 7.5
         assert task.max_steps == 50
-        assert task.difficulty_estimate == "easy"  # >= 8.0 is easy
+        assert task.difficulty_estimate == "medium"
         
         # Test serialization
         task_dict = task.to_dict()
@@ -184,6 +180,17 @@ class TestAgentInterfaces:
         task_setter.update_from_episode(episode)
         stats = task_setter.get_task_statistics()
         assert isinstance(stats, dict)
+
+    def test_task_ids_increment_per_template(self):
+        """Task instances should get unique sequential IDs per template."""
+        task_setter = TaskSetter()
+
+        first = task_setter._instantiate_task(task_setter._task_templates[0])
+        task_setter._template_counts[first.metadata["template"]] = 1
+        second = task_setter._instantiate_task(task_setter._task_templates[0])
+
+        assert first.id.endswith("_001")
+        assert second.id.endswith("_002")
     
     def test_reward_model(self):
         """Test reward model functionality."""
@@ -206,7 +213,7 @@ class TestAgentInterfaces:
         assert estimated >= 0
         
         # Create test episode
-        from experience.types import Episode, Transition
+        from src.experience.types import Episode, Transition
         transitions = [
             Transition(
                 obs={"pixels": np.zeros(25), "info": {"agent_pos": (0, 0)}},
@@ -260,6 +267,53 @@ class TestAgentIntegration:
         )
         
         return agent
+
+    def test_success_threshold_is_configurable(self):
+        """Test that agent success uses the configured threshold."""
+        env = DummyGameEnv(grid_size=5, max_steps=5)
+        encoder = DummyVisionEncoder(feature_dim=16)
+        policy = RandomPolicy()
+        reward_model = SimpleRewardModel(
+            goal_completion_reward=10.0,
+            step_penalty=0.0,
+            progress_reward_scale=0.0,
+        )
+
+        strict_agent = Agent(
+            env=env,
+            policy=policy,
+            reward_model=reward_model,
+            encoder=encoder,
+            success_threshold=11.0,
+        )
+        permissive_agent = Agent(
+            env=env,
+            policy=policy,
+            reward_model=reward_model,
+            encoder=encoder,
+            success_threshold=1.0,
+        )
+
+        task = Task(
+            id="threshold_test",
+            description="Threshold test task",
+            estimated_reward=5.0,
+            max_steps=20,
+        )
+
+        success_episode = None
+        for _ in range(20):
+            episode = permissive_agent.run_episode(task)
+            if episode.reached_goal:
+                success_episode = episode
+                break
+
+        assert success_episode is not None
+        assert success_episode.success is True
+
+        strict_agent_episode = strict_agent.run_episode(task)
+        if strict_agent_episode.reached_goal:
+            assert strict_agent_episode.success is False
     
     def test_agent_creation(self):
         """Test agent initialization."""
@@ -415,7 +469,7 @@ class TestSystemIntegration:
         assert isinstance(reward, (int, float))
         
         # Episode -> RewardModel
-        from experience.types import Episode, Transition
+        from src.experience.types import Episode, Transition
         transition = Transition(obs=obs, action=action, reward=reward, done=done, info=info)
         task = Task(id="test", description="test", estimated_reward=5.0, max_steps=10)
         episode = Episode(

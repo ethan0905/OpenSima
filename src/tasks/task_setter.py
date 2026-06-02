@@ -38,6 +38,7 @@ class TaskSetter:
         self._task_templates = self._create_default_tasks()
         self._task_performance: Dict[str, List[float]] = {}
         self._task_counts: Dict[str, int] = {}
+        self._template_counts: Dict[str, int] = {}
 
     def propose_task(self) -> Task:
         """
@@ -62,6 +63,8 @@ class TaskSetter:
         
         # Track that we've proposed this task
         self._task_counts[task.id] = self._task_counts.get(task.id, 0) + 1
+        template_id = task.metadata.get("template", task.id)
+        self._template_counts[template_id] = self._template_counts.get(template_id, 0) + 1
         
         return task
 
@@ -292,7 +295,7 @@ class TaskSetter:
             Concrete Task instance
         """
         # Generate unique task ID
-        task_count = self._task_counts.get(template["id_prefix"], 0)
+        task_count = self._template_counts.get(template["id_prefix"], 0)
         task_id = f"{template['id_prefix']}_{task_count + 1:03d}"
         
         # Estimate reward based on agent's current capabilities

@@ -202,8 +202,9 @@ class SIMAConfig:
         return {
             "environment": self.environment.__dict__,
             "agent": self.agent.__dict__,
-            "training": self.training.__dict__, 
+            "training": self.training.__dict__,
             "experience": self.experience.__dict__,
+            "minecraft": self.minecraft.__dict__,
             "experiment_name": self.experiment_name,
             "random_seed": self.random_seed,
             "log_level": self.log_level,
@@ -221,12 +222,14 @@ class SIMAConfig:
         agent_config = AgentConfig(**data.get("agent", {}))
         training_config = TrainingConfig(**data.get("training", {}))
         experience_config = ExperienceConfig(**data.get("experience", {}))
+        minecraft_config = MinecraftConfig(**data.get("minecraft", {}))
         
         return cls(
             environment=env_config,
             agent=agent_config,
             training=training_config,
             experience=experience_config,
+            minecraft=minecraft_config,
             experiment_name=data.get("experiment_name", "sima_experiment"),
             random_seed=data.get("random_seed", 42),
             log_level=data.get("log_level", "INFO"),
