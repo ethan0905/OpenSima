@@ -3,7 +3,7 @@ from typing import Any
 
 from openai import OpenAI
 
-from schemas import ActionPlan
+from schemas import ActionPlan, ProgressDecision
 
 
 SYSTEM_PROMPT = """You are a Minecraft planning agent.
@@ -23,6 +23,18 @@ Never generate slash commands.
 Never generate code.
 Never generate keyboard/mouse instructions.
 Never invent actions outside the whitelist.
+Do not include explanations outside JSON."""
+
+
+VERIFIER_SYSTEM_PROMPT = """You are a Minecraft task verifier.
+Your job is to decide whether a Minecraft agent has completed, should continue, or is blocked on a user's objective.
+
+You do not produce actions.
+You only produce JSON matching the provided schema.
+Use the execution result and the latest Minecraft state.
+If the last plan failed but there is an obvious safe next attempt, choose continue.
+If the objective is clearly satisfied, choose done.
+If the objective cannot be completed with the current action capabilities or repeated failures show no progress, choose blocked.
 Do not include explanations outside JSON."""
 
 
@@ -156,6 +168,19 @@ OPENAI_ACTION_PLAN_SCHEMA: dict[str, Any] = {
 }
 
 
+OPENAI_PROGRESS_DECISION_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "decision": {"type": "string", "enum": ["continue", "done", "blocked"]},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 500},
+        "next_focus": {"type": "string", "minLength": 1, "maxLength": 300},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    },
+    "required": ["decision", "reason", "next_focus", "confidence"],
+}
+
+
 class OpenAIPlanner:
     def __init__(self, api_key: str, model: str) -> None:
         if not api_key:
@@ -188,3 +213,81 @@ class OpenAIPlanner:
             },
         )
         return ActionPlan.model_validate_json(response.output_text)
+
+    def create_next_plan(
+        self,
+        user_request: str,
+        state: dict[str, Any],
+        history: list[dict[str, Any]],
+        max_steps: int,
+    ) -> ActionPlan:
+        prompt = {
+            "user_request": user_request,
+            "current_minecraft_state": state,
+            "recent_history": history,
+            "allowed_actions": ALLOWED_ACTIONS,
+            "json_schema": OPENAI_ACTION_PLAN_SCHEMA,
+            "current_limitations": LIMITATIONS,
+            "planning_instruction": (
+                f"Create only the next minimal action batch, with 1 to {max_steps} steps. "
+                "Do not try to solve the whole task in one large plan. "
+                "Use recent_history to avoid repeating failed actions unless there is a clear reason."
+            ),
+        }
+
+        response = self.client.responses.create(
+            model=self.model,
+            input=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": json.dumps(prompt, indent=2)},
+            ],
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "minecraft_next_action_plan",
+                    "strict": True,
+                    "schema": OPENAI_ACTION_PLAN_SCHEMA,
+                }
+            },
+        )
+        return ActionPlan.model_validate_json(response.output_text)
+
+    def verify_progress(
+        self,
+        user_request: str,
+        previous_state: dict[str, Any],
+        plan: ActionPlan,
+        result: dict[str, Any],
+        current_state: dict[str, Any],
+        history: list[dict[str, Any]],
+    ) -> ProgressDecision:
+        prompt = {
+            "user_request": user_request,
+            "previous_minecraft_state": previous_state,
+            "executed_plan": plan.model_dump(),
+            "execution_result": result,
+            "current_minecraft_state": current_state,
+            "recent_history": history,
+            "decision_meanings": {
+                "continue": "More safe progress is possible and needed.",
+                "done": "The user's objective is satisfied.",
+                "blocked": "The task cannot currently be completed or repeated attempts are not making progress.",
+            },
+        }
+
+        response = self.client.responses.create(
+            model=self.model,
+            input=[
+                {"role": "system", "content": VERIFIER_SYSTEM_PROMPT},
+                {"role": "user", "content": json.dumps(prompt, indent=2)},
+            ],
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "minecraft_progress_decision",
+                    "strict": True,
+                    "schema": OPENAI_PROGRESS_DECISION_SCHEMA,
+                }
+            },
+        )
+        return ProgressDecision.model_validate_json(response.output_text)

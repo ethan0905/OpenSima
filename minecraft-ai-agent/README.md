@@ -31,6 +31,9 @@ AGENT_API_PORT=3001
 AGENT_VIEWER_PORT=3002
 AGENT_VIEWER_DISTANCE=6
 AGENT_VIEWER_ENABLED=true
+REASONING_MAX_ITERATIONS=5
+REASONING_MAX_STEPS_PER_PLAN=4
+REASONING_VERBOSE=true
 ```
 
 ## Run
@@ -121,15 +124,13 @@ curl http://localhost:3001/state
 
 ## Flow
 
-1. User enters a natural-language request in the Python CLI.
-2. Python calls `GET http://localhost:3001/state`.
-3. The Mineflayer API returns compact game state: agent position, health, food, inventory, nearby useful blocks, nearby entities, and basic world info.
-4. Python sends the user request, current state, allowed actions, limitations, and strict JSON schema to OpenAI.
-5. OpenAI returns only JSON matching the action-plan shape.
-6. Python validates the plan with Pydantic and additional safety rules.
-7. Python sends the validated plan to `POST http://localhost:3001/action-plan`.
-8. Mineflayer executes steps sequentially with timeouts and whitelisted handlers.
-9. Python prints the assistant message and execution result.
+1. User enters a natural-language objective in the Python CLI.
+2. Python starts a reasoning loop with a default budget of 5 iterations.
+3. Each iteration reads current state from `GET http://localhost:3001/state`.
+4. OpenAI plans the next small action batch, limited by `REASONING_MAX_STEPS_PER_PLAN`.
+5. Python validates the batch with Pydantic and safety rules, then sends it to `POST http://localhost:3001/action-plan`.
+6. Mineflayer executes the whitelisted steps and returns per-step results.
+7. Python reads fresh state, asks OpenAI to verify progress, and continues until the objective is done, blocked, cancelled, or the iteration budget is reached.
 
 ## Safety Model
 
@@ -140,6 +141,7 @@ curl http://localhost:3001/state
 - Mineflayer only executes known whitelisted actions.
 - Suspicious command-like strings such as `/give`, `/tp`, `/op`, and `/execute` are rejected.
 - Action plans are limited to 12 steps.
+- Reasoning loop tasks are bounded by `REASONING_MAX_ITERATIONS`.
 - Counts and movement distances are bounded.
 - High-risk plans require confirmation.
 
@@ -159,7 +161,6 @@ curl http://localhost:3001/state
 
 ## Known Limitations
 
-- No web UI.
 - No authentication.
 - No database or memory.
 - No screen control, keyboard/mouse automation, or computer vision.
