@@ -1,0 +1,23 @@
+# to run the program
+
+open minecraft, go to multiplayer, direct connection, enter the localhost:25565, click on join server.
+
+```
+cd /Users/ethan/Desktop/OpenSIMA2/minecraft-ai-agent
+  MINECRAFT_VERSION=1.21.8 MINECRAFT_GAMEMODE=creative ACCEPT_MINECRAFT_EULA=true ./scripts/
+  start_minecraft_server.sh
+```
+
+# then
+
+```
+cd OpenSIMA2/minecraft-ai-agent
+npm run agent
+```
+
+# then
+
+```
+cd minecraft-ai-agent/
+python python/main.py
+```
