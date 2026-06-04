@@ -3,14 +3,18 @@ from requests import RequestException
 
 from config import get_settings
 from minecraft_client import MinecraftClient
-from openai_planner import OpenAIPlanner
+from gemini_planner import GeminiPlanner
 from reasoning_loop import ReasoningLoop
 
 
 def main() -> None:
     settings = get_settings()
     minecraft = MinecraftClient(settings.agent_base_url)
-    planner = OpenAIPlanner(settings.openai_api_key, settings.openai_model)
+    planner = GeminiPlanner(
+        settings.gemini_api_key,
+        settings.gemini_model,
+        fallback_model=settings.gemini_fallback_model,
+    )
     loop = ReasoningLoop(
         minecraft=minecraft,
         planner=planner,

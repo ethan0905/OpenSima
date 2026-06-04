@@ -7,8 +7,10 @@ const path = require('path')
 const { mineflayer: mineflayerViewer } = require('prismarine-viewer')
 const { pathfinder, Movements } = require('mineflayer-pathfinder')
 const collectBlock = require('mineflayer-collectblock').plugin
+const pvp = require('mineflayer-pvp').plugin
 
 const { getState } = require('./state')
+const { MineflayerReasoningBrain } = require('./MineflayerReasoningBrain')
 const moveTo = require('./actions/move_to')
 const followPlayer = require('./actions/follow_player')
 const collectBlockAction = require('./actions/collect_block')
@@ -29,6 +31,11 @@ const CHAT_STATUS = process.env.AGENT_CHAT_STATUS !== 'false'
 const VIEWER_PORT = Number(process.env.AGENT_VIEWER_PORT || 3002)
 const VIEWER_DISTANCE = Number(process.env.AGENT_VIEWER_DISTANCE || 6)
 const VIEWER_ENABLED = process.env.AGENT_VIEWER_ENABLED !== 'false'
+const BRAIN_ENABLED = process.env.AGENT_REASONING_BRAIN_ENABLED !== 'false'
+const BRAIN_CHAT_ENABLED = process.env.AGENT_REASONING_CHAT_ENABLED !== 'false'
+const BRAIN_CHAT_PREFIX = process.env.AGENT_REASONING_CHAT_PREFIX || '!agent'
+const BRAIN_SCAN_RADIUS = Number(process.env.AGENT_REASONING_SCAN_RADIUS || process.env.AGENT_BLOCK_SCAN_RADIUS || 48)
+const BRAIN_TIMEOUT_MS = Number(process.env.AGENT_REASONING_TIMEOUT_MS || 90000)
 
 const ACTIONS = {
   move_to: moveTo,
@@ -44,6 +51,7 @@ const ACTIONS = {
 
 let isSpawned = false
 let isExecuting = false
+const reasoningBrain = new MineflayerReasoningBrain({ maxDistance: BRAIN_SCAN_RADIUS })
 
 const bot = mineflayer.createBot({
   host: MINECRAFT_HOST,
@@ -53,11 +61,13 @@ const bot = mineflayer.createBot({
 
 bot.loadPlugin(pathfinder)
 bot.loadPlugin(collectBlock)
+bot.loadPlugin(pvp)
 
 bot.once('spawn', () => {
   isSpawned = true
   const mcData = mcDataLoader(bot.version)
   bot.pathfinder.setMovements(new Movements(bot, mcData))
+  reasoningBrain.registerPlugins(bot)
   startViewer()
   console.log(`[agent] Spawned as ${bot.username} on ${MINECRAFT_HOST}:${MINECRAFT_PORT}`)
   sayStatus('online and ready')
@@ -71,6 +81,21 @@ bot.on('end', () => {
 bot.on('kicked', reason => console.log('[agent] Kicked:', reason))
 bot.on('error', error => console.error('[agent] Error:', error.message))
 bot.on('health', () => console.log(`[agent] Health=${bot.health} Food=${bot.food}`))
+bot.on('chat', async (username, message) => {
+  if (!BRAIN_ENABLED || !BRAIN_CHAT_ENABLED) return
+  if (username === bot.username) return
+
+  const instruction = extractBrainInstruction(message)
+  if (!instruction) return
+
+  try {
+    const result = await runReasoningBrain(instruction)
+    console.log('[brain] Chat-triggered result:', JSON.stringify(result.execution || result, null, 2))
+  } catch (error) {
+    console.error('[brain] Chat-triggered reasoning failed:', error.message)
+    sayStatus(`brain failed: ${error.message}`.slice(0, 90))
+  }
+})
 
 const app = express()
 app.use(express.json({ limit: '128kb' }))
@@ -89,6 +114,28 @@ app.get('/dashboard-config', (req, res) => {
 app.get('/state', (req, res) => {
   try {
     res.json(getState(bot, isSpawned, isExecuting))
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message })
+  }
+})
+
+app.post('/brain/think-and-act', async (req, res) => {
+  const instruction = typeof req.body?.instruction === 'string'
+    ? req.body.instruction.trim()
+    : typeof req.body?.humanInstruction === 'string'
+      ? req.body.humanInstruction.trim()
+      : ''
+
+  if (!BRAIN_ENABLED) {
+    return res.status(503).json({ ok: false, error: 'Reasoning brain is disabled' })
+  }
+  if (!instruction) {
+    return res.status(400).json({ ok: false, error: 'instruction is required' })
+  }
+
+  try {
+    const result = await runReasoningBrain(instruction)
+    res.json(result)
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message })
   }
@@ -160,6 +207,42 @@ async function executePlan (actionPlan) {
     completed_steps: completedSteps,
     step_results: stepResults
   }
+}
+
+async function runReasoningBrain (instruction) {
+  if (isExecuting) {
+    throw new Error('Agent is already executing an action')
+  }
+
+  isExecuting = true
+  try {
+    if (!isSpawned) {
+      await waitForEvent(bot, 'spawn', 30000)
+    }
+    console.log(`[brain] Instruction: ${instruction}`)
+    return await withTimeout(
+      reasoningBrain.thinkAndAct(bot, instruction),
+      BRAIN_TIMEOUT_MS,
+      'reasoning_brain'
+    )
+  } finally {
+    isExecuting = false
+  }
+}
+
+function extractBrainInstruction (message) {
+  const text = String(message || '').trim()
+  if (!text) return ''
+  if (text.startsWith(BRAIN_CHAT_PREFIX)) {
+    return text.slice(BRAIN_CHAT_PREFIX.length).trim()
+  }
+
+  const mention = `${bot.username} `
+  if (text.toLowerCase().startsWith(mention.toLowerCase())) {
+    return text.slice(mention.length).trim()
+  }
+
+  return ''
 }
 
 function sayStatus (message) {

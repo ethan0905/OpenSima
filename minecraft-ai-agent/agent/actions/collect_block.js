@@ -1,11 +1,13 @@
 const { withTimeout } = require('./utils')
 
+const COLLECT_SCAN_RADIUS = Number(process.env.AGENT_COLLECT_SCAN_RADIUS || 64)
+
 module.exports = async function collectBlock (bot, params) {
   const blockName = params.block
   const wanted = Number(params.count ?? 1)
   const positions = bot.findBlocks({
     matching: block => block && block.name === blockName,
-    maxDistance: 32,
+    maxDistance: COLLECT_SCAN_RADIUS,
     count: wanted
   })
   const blocks = positions.map(pos => bot.blockAt(pos)).filter(Boolean)

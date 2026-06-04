@@ -1,6 +1,6 @@
 # Minecraft AI Agent MVP
 
-A local Python + Mineflayer MVP where a user chats with an OpenAI-powered planner. The Python app reads current Minecraft state from a Node.js Mineflayer agent, asks OpenAI for a strict JSON action plan, validates the plan with Pydantic and extra safety rules, then sends only validated whitelisted actions to the Mineflayer HTTP API for execution.
+A local Python + Mineflayer MVP where a user chats with a Gemini-powered planner. The Python app reads current Minecraft state from a Node.js Mineflayer agent, asks Gemini for a strict JSON action plan, validates the plan with Pydantic and extra safety rules, then sends only validated whitelisted actions to the Mineflayer HTTP API for execution.
 
 ## Requirements
 
@@ -8,7 +8,7 @@ A local Python + Mineflayer MVP where a user chats with an OpenAI-powered planne
 - Node.js 20+
 - Minecraft Java Edition
 - Local or remote Minecraft server
-- OpenAI API key
+- Gemini API key
 
 ## Install
 
@@ -19,10 +19,11 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Edit `.env` and set `OPENAI_API_KEY`. Defaults:
+Edit `.env` and set `GEMINI_API_KEY`. Defaults:
 
 ```bash
-OPENAI_MODEL=gpt-4.1-mini
+GEMINI_MODEL=gemini-3.1-flash-lite
+GEMINI_FALLBACK_MODEL=gemini-3.5-flash
 MINECRAFT_HOST=localhost
 MINECRAFT_PORT=25565
 MINECRAFT_AGENT_USERNAME=AI_Agent
@@ -31,6 +32,15 @@ AGENT_API_PORT=3001
 AGENT_VIEWER_PORT=3002
 AGENT_VIEWER_DISTANCE=6
 AGENT_VIEWER_ENABLED=true
+AGENT_BLOCK_SCAN_RADIUS=48
+AGENT_ENTITY_SCAN_RADIUS=48
+AGENT_BLOCK_SCAN_COUNT=160
+AGENT_COLLECT_SCAN_RADIUS=64
+AGENT_REASONING_BRAIN_ENABLED=true
+AGENT_REASONING_CHAT_ENABLED=true
+AGENT_REASONING_CHAT_PREFIX=!agent
+AGENT_REASONING_SCAN_RADIUS=48
+AGENT_REASONING_TIMEOUT_MS=90000
 REASONING_MAX_ITERATIONS=5
 REASONING_MAX_STEPS_PER_PLAN=4
 REASONING_VERBOSE=true
@@ -90,6 +100,22 @@ http://localhost:3001/dashboard
 
 The dashboard shows the agent's live Prismarine Viewer perspective plus health, food, position, held item, inventory, nearby entities, and nearby tracked blocks. The viewer itself runs on `AGENT_VIEWER_PORT`, which defaults to `3002`.
 
+The Node agent also exposes a direct reasoning-brain path:
+
+```bash
+curl -X POST http://localhost:3001/brain/think-and-act \
+  -H 'content-type: application/json' \
+  -d '{"instruction":"collect one yellow flower"}'
+```
+
+From Minecraft chat, use the configured prefix:
+
+```text
+!agent collect one red flower
+```
+
+The Python CLI remains the main iterative planner. The Node reasoning brain is useful for direct chat-triggered perceive/think/act behavior and shares the Mineflayer plugins directly.
+
 In another terminal:
 
 ```bash
@@ -127,10 +153,12 @@ curl http://localhost:3001/state
 1. User enters a natural-language objective in the Python CLI.
 2. Python starts a reasoning loop with a default budget of 5 iterations.
 3. Each iteration reads current state from `GET http://localhost:3001/state`.
-4. OpenAI plans the next small action batch, limited by `REASONING_MAX_STEPS_PER_PLAN`.
+4. Gemini plans the next small action batch, limited by `REASONING_MAX_STEPS_PER_PLAN`.
 5. Python validates the batch with Pydantic and safety rules, then sends it to `POST http://localhost:3001/action-plan`.
 6. Mineflayer executes the whitelisted steps and returns per-step results.
-7. Python reads fresh state, asks OpenAI to verify progress, and continues until the objective is done, blocked, cancelled, or the iteration budget is reached.
+7. Python reads fresh state, asks Gemini to verify progress, and continues until the objective is done, blocked, cancelled, or the iteration budget is reached.
+
+If the primary Gemini model returns an incomplete or invalid action batch, Python first repairs obvious missing params from the current world state and user request. If the plan still cannot validate, it retries generation with `GEMINI_FALLBACK_MODEL`.
 
 ## Safety Model
 
@@ -164,7 +192,7 @@ curl http://localhost:3001/state
 - No authentication.
 - No database or memory.
 - No screen control, keyboard/mouse automation, or computer vision.
-- Nearby block scanning is intentionally compact and may miss resources outside the scan radius.
+- Nearby block scanning is bounded by `AGENT_BLOCK_SCAN_RADIUS` and loaded chunks; increasing it can find more resources but costs more CPU.
 - Crafting is basic and depends on Mineflayer recipe availability and nearby crafting tables.
 - Combat is simple and not a full survival strategy.
 - Building is intentionally small and may partially complete if placement geometry or inventory is insufficient.
