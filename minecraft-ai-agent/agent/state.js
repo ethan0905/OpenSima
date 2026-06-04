@@ -2,16 +2,53 @@ const USEFUL_BLOCKS = new Set([
   'oak_log',
   'birch_log',
   'spruce_log',
+  'jungle_log',
+  'acacia_log',
+  'dark_oak_log',
+  'mangrove_log',
+  'cherry_log',
   'stone',
+  'cobblestone',
   'dirt',
+  'grass_block',
+  'sand',
+  'gravel',
+  'clay',
+  'cactus',
+  'sugar_cane',
+  'poppy',
+  'dandelion',
+  'blue_orchid',
+  'allium',
+  'azure_bluet',
+  'red_tulip',
+  'orange_tulip',
+  'white_tulip',
+  'pink_tulip',
+  'oxeye_daisy',
+  'cornflower',
+  'lily_of_the_valley',
+  'sunflower',
+  'lilac',
+  'rose_bush',
+  'peony',
   'coal_ore',
   'iron_ore',
+  'copper_ore',
+  'gold_ore',
+  'redstone_ore',
+  'lapis_ore',
+  'diamond_ore',
   'crafting_table',
   'furnace',
   'chest',
   'water',
   'lava'
 ])
+
+const BLOCK_SCAN_RADIUS = Number(process.env.AGENT_BLOCK_SCAN_RADIUS || 48)
+const ENTITY_SCAN_RADIUS = Number(process.env.AGENT_ENTITY_SCAN_RADIUS || 48)
+const BLOCK_SCAN_COUNT = Number(process.env.AGENT_BLOCK_SCAN_COUNT || 160)
 
 function compactPosition (pos) {
   if (!pos) return null
@@ -49,7 +86,7 @@ function heldItem (bot) {
   }
 }
 
-function nearbyEntities (bot, radius = 24) {
+function nearbyEntities (bot, radius = ENTITY_SCAN_RADIUS) {
   if (!bot.entity) return []
 
   return Object.values(bot.entities)
@@ -62,7 +99,7 @@ function nearbyEntities (bot, radius = 24) {
     }))
     .filter(entity => entity.distance <= radius)
     .sort((a, b) => a.distance - b.distance)
-    .slice(0, 20)
+    .slice(0, 40)
 }
 
 function players (bot) {
@@ -84,13 +121,13 @@ function players (bot) {
     })
 }
 
-function nearbyBlocks (bot, radius = 8) {
+function nearbyBlocks (bot, radius = BLOCK_SCAN_RADIUS) {
   if (!bot.entity) return []
 
   const blocks = bot.findBlocks({
     matching: block => block && USEFUL_BLOCKS.has(block.name),
     maxDistance: radius,
-    count: 80
+    count: BLOCK_SCAN_COUNT
   })
 
   return blocks
@@ -103,7 +140,7 @@ function nearbyBlocks (bot, radius = 8) {
       }
     })
     .sort((a, b) => a.distance - b.distance)
-    .slice(0, 40)
+    .slice(0, BLOCK_SCAN_COUNT)
 }
 
 function getState (bot, isSpawned, isExecuting = false) {

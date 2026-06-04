@@ -3,7 +3,8 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from minecraft_client import MinecraftClient
-from openai_planner import OpenAIPlanner
+from pydantic import ValidationError
+from gemini_planner import GeminiPlanner
 from schemas import ActionPlan, ProgressDecision
 from validator import validate_action_plan
 
@@ -24,7 +25,7 @@ class ReasoningLoop:
     def __init__(
         self,
         minecraft: MinecraftClient,
-        planner: OpenAIPlanner,
+        planner: GeminiPlanner,
         max_iterations: int = 5,
         max_steps_per_plan: int = 4,
         verbose: bool = True,
@@ -52,8 +53,12 @@ class ReasoningLoop:
                 compact_history,
                 self.max_steps_per_plan,
             )
-            validate_action_plan(plan, previous_state)
-            _validate_plan_size(plan, self.max_steps_per_plan)
+            plan = self._validated_or_repaired_plan(
+                goal,
+                previous_state,
+                compact_history,
+                plan,
+            )
 
             print(f"\nIteration {iteration}/{self.max_iterations}")
             print(f"Assistant> {plan.message_to_user}")
@@ -121,10 +126,39 @@ class ReasoningLoop:
             history=history,
         )
 
+    def _validated_or_repaired_plan(
+        self,
+        goal: str,
+        state: dict[str, Any],
+        history: list[dict[str, Any]],
+        plan: ActionPlan,
+    ) -> ActionPlan:
+        try:
+            return _validate_plan(plan, state, self.max_steps_per_plan)
+        except (ValidationError, ValueError) as exc:
+            if self.verbose:
+                _print_trace("Planner validation failed", {"error": str(exc), "plan": plan.model_dump()})
+
+            repaired = self.planner.repair_plan(
+                goal,
+                state,
+                history,
+                plan.model_dump(),
+                str(exc),
+                self.max_steps_per_plan,
+            )
+            return _validate_plan(repaired, state, self.max_steps_per_plan)
+
 
 def _validate_plan_size(plan: ActionPlan, max_steps: int) -> None:
     if len(plan.plan) > max_steps:
         raise ValueError(f"planner returned {len(plan.plan)} steps; max is {max_steps}")
+
+
+def _validate_plan(plan: ActionPlan, state: dict[str, Any], max_steps: int) -> ActionPlan:
+    validate_action_plan(plan, state)
+    _validate_plan_size(plan, max_steps)
+    return plan
 
 
 def _state_summary(state: dict[str, Any]) -> dict[str, Any]:
